@@ -1,19 +1,21 @@
 # FHIR Patient API
 
-A simple FastAPI application that exposes a root endpoint and returns a JSON message.
+A simple FastAPI application that stores patient data in PostgreSQL using SQLAlchemy.
 
 ## Requirements
 
 - Python 3.11+ (or compatible)
 - `fastapi`
 - `uvicorn`
+- `sqlalchemy`
+- `psycopg2-binary`
 
 If you are using a virtual environment, activate it first.
 
 ## Install
 
 ```bash
-pip install fastapi uvicorn
+pip install fastapi uvicorn sqlalchemy psycopg2-binary
 ```
 
 ## Run
@@ -22,28 +24,19 @@ pip install fastapi uvicorn
 uvicorn main:app --reload
 ```
 
-Then open:
-
-```text
-http://127.0.0.1:8000/
-```
-
 ## What it does
 
 - `main.py` creates a FastAPI app
-- `@app.get("/")` defines a GET endpoint for `/`
-- `@app.post("/patients")` defines a POST endpoint to create a patient resource
+- connects to PostgreSQL via SQLAlchemy
+- defines `PatientDB` as a SQLAlchemy table for patient records
+- defines `Patient` as a Pydantic request model
+- `@app.post("/patient")` inserts a patient into the database
 - `@app.get("/patient/{patient_id}")` returns a patient by id
 - `@app.get("/patient")` searches patients by `name` query parameter
-- the root endpoint returns:
-
-```json
-{"message": "FHIR API starting"}
-```
 
 ## Patient POST example
 
-Send this JSON to `POST http://127.0.0.1:8000/patients`:
+Send this JSON to `POST http://127.0.0.1:8000/patient`:
 
 ```json
 {
@@ -95,11 +88,11 @@ Response example:
 }
 ```
 
-## Storage behavior
+## Database behavior
 
-- `patients_db` is a temporary in-memory dictionary.
-- Data is only saved while the server is running.
-- When the server restarts, the stored patients are lost.
+- The app uses PostgreSQL via the `DATABASE_URL` configured in `main.py`.
+- `Base.metadata.create_all(bind=engine)` creates the `patients` table automatically.
+- Data is stored persistently in the database.
 
 ## Notes
 

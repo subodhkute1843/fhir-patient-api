@@ -1,57 +1,76 @@
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel
-   
-app = FastAPI()
+from sqlalchemy import create_engine, Column, String
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
 
-#Temporory storage (will use database later)
-patients_db = {}
+# Database connection
+DATABASE_URL = "postgresql://postgres:postgres@localhost/fhir_db"
+engine = create_engine(DATABASE_URL)
+SessionLocal = sessionmaker(bind=engine)
+Base = declarative_base()
+
+#Define Patient Table
+class PatientDB(Base):
+    __tablename__ = "patients"
+    id = Column(String, primary_key=True)
+    name = Column(String)
+    dob = Column(String)
+
+#create table
+Base.metadata.create_all(bind=engine)
+
+app = FastAPI()
 
 class Patient(BaseModel):
     id: str
     name: str
     dob: str
 
-@app.get("/")
-def hello():
-    return {"message": "FHIR API starting"}
+# @app.get("/")
+# def hello():
+#     return {"message": "FHIR API starting"}
 
-
-@app.post("/patients")
+@app.post("/patient")
 def create_patient(patient: Patient):
     #pydenting automatically validates : if name or dob is missing, return 400
-    patients_db[patient.id] = patient.dict()
+    db = SessionLocal()
+    db_patient = PatientDB(id=patient.id, name=patient.name, dob=patient.dob)
+    db.add(db_patient)
+    db.commit()
+    db.refresh(db_patient) 
     return {
         "resourceType": "Patient",
-        "id" : patient.id,
-        "name": patient.name,
-        "dateOfBirth": patient.dob
+        "id" : db_patient.id,
+        "name": db_patient.name,
+        "dateOfBirth": db_patient.dob
     }
 
 @app.get("/patient/{patient_id}")
 def get_patient(patient_id: str):
-    if patient_id not in patients_db:
+    db = SessionLocal()
+    p = db.query(PatientDB).filter(PatientDB.id == patient_id).first()
+    if not p:
         raise HTTPException(status_code=404,detail="Patient not found")
-    p = patients_db[patient_id]
     return { 
         "resourceType"  : "Patient",
-        "id" : p["id"],
-        "name"  :  p["name"],
-        "dateOfBirth" : p["dob"]
+        "id" : p.id,
+        "name"  :  p.name,
+        "dateOfBirth" : p.dob
     }
 
 @app.get("/patient")
 def search_patients(name: str = Query(None)):
     if not name :
         return {"error" : "name query parameter required"}
-    
-    results = []
-    for patient_id, p in patients_db.items():
-        if name.lower() in p["name"].lower() :
-            results.append({
-                "resourceType" : "Patient",
-                "id" : p["id"],
-                "name"  :  p["name"],
-                "dateOfBirth" : p["dob"]
-            })
-
-    return {"entry" : results}
+    db = SessionLocal()
+    results = db.query(PatientDB).filter(PatientDB.name.ilike(f"%{name}%")).all()
+    return {
+        "entry": [{
+            "resourceType"  : "Patient",
+            "id" : r.id,
+            "name"  :  r.name,
+            "dateOfBirth" : r.dob
+        } for r in results
+        ]
+    }
